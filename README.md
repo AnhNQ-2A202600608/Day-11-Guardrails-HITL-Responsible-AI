@@ -52,6 +52,8 @@ Day-11-Guardrails-HITL-Responsible-AI/
 
 ```bash
 pip install -r requirements.txt
+export GEMINI_API_KEY="your-api-key-here"
+# OR
 export GOOGLE_API_KEY="your-api-key-here"
 jupyter notebook notebooks/lab11_guardrails_hitl.ipynb
 ```
@@ -61,6 +63,8 @@ jupyter notebook notebooks/lab11_guardrails_hitl.ipynb
 ```bash
 cd src/
 pip install -r ../requirements.txt
+export GEMINI_API_KEY="your-api-key-here"
+# OR
 export GOOGLE_API_KEY="your-api-key-here"
 
 # Run the full lab

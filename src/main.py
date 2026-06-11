@@ -96,7 +96,13 @@ async def part3_testing():
 
     # TODO 11: Automated security pipeline
     print("\n--- TODO 11: Security Test Pipeline ---")
-    agent, runner = create_unsafe_agent()
+    from guardrails.input_guardrails import InputGuardrailPlugin
+    from guardrails.output_guardrails import OutputGuardrailPlugin, _init_judge
+    from agents.agent import create_protected_agent
+    _init_judge()
+    input_plugin = InputGuardrailPlugin()
+    output_plugin = OutputGuardrailPlugin(use_llm_judge=True)
+    agent, runner = create_protected_agent(plugins=[input_plugin, output_plugin])
     pipeline = SecurityTestPipeline(agent, runner)
     results = await pipeline.run_all()
     if results:

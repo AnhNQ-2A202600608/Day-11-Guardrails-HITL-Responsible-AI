@@ -4,6 +4,10 @@ Lab 11 — Helper Utilities
 from google.genai import types
 
 
+import asyncio
+import time
+from google.genai.errors import ClientError, ServerError
+
 async def chat_with_agent(agent, runner, user_message: str, session_id=None):
     """Send a message to the agent and get the response.
 
@@ -43,13 +47,59 @@ async def chat_with_agent(agent, runner, user_message: str, session_id=None):
         parts=[types.Part.from_text(text=user_message)],
     )
 
-    final_response = ""
-    async for event in runner.run_async(
-        user_id=user_id, session_id=session.id, new_message=content
-    ):
-        if hasattr(event, "content") and event.content and event.content.parts:
-            for part in event.content.parts:
-                if hasattr(part, "text") and part.text:
-                    final_response += part.text
+    for attempt in range(6):
+        try:
+            final_response = ""
+            async for event in runner.run_async(
+                user_id=user_id, session_id=session.id, new_message=content
+            ):
+                if hasattr(event, "content") and event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if hasattr(part, "text") and part.text:
+                            final_response += part.text
+            return final_response, session
+        except (ClientError, ServerError) as e:
+            status_code = getattr(e, "code", None)
+            if status_code in [429, 503] or any(err in str(e) for err in ["429", "503"]):
+                wait_time = 65 if status_code == 429 or "429" in str(e) else 10 + attempt * 5
+                print(f"Temporary API error {status_code or 'UNKNOWN'}. Waiting {wait_time}s before retrying...")
+                await asyncio.sleep(wait_time)
+            else:
+                raise e
+        except Exception as e:
+            if any(err in str(e) for err in ["429", "503"]):
+                wait_time = 65 if "429" in str(e) else 10 + attempt * 5
+                print(f"Temporary API error. Waiting {wait_time}s before retrying...")
+                await asyncio.sleep(wait_time)
+            else:
+                raise e
 
-    return final_response, session
+    raise Exception("Failed to call agent due to persistent temporary rate limits/server errors")
+
+
+async def generate_content_with_retry(client, model, contents, config=None):
+    """Call generate_content with exponential backoff on 429/503 limits."""
+    for attempt in range(6):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config
+            )
+            return response
+        except (ClientError, ServerError) as e:
+            status_code = getattr(e, "code", None)
+            if status_code in [429, 503] or any(err in str(e) for err in ["429", "503"]):
+                wait_time = 65 if status_code == 429 or "429" in str(e) else 10 + attempt * 5
+                print(f"Temporary generate_content error {status_code or 'UNKNOWN'}. Waiting {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                raise e
+        except Exception as e:
+            if any(err in str(e) for err in ["429", "503"]):
+                wait_time = 65 if "429" in str(e) else 10 + attempt * 5
+                print(f"Temporary generate_content error. Waiting {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                raise e
+    raise Exception("Failed to call generate_content due to persistent temporary rate limits/server errors")

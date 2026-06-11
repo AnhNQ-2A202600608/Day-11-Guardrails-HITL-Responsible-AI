@@ -38,9 +38,16 @@ def detect_injection(user_input: str) -> bool:
         True if injection detected, False otherwise
     """
     INJECTION_PATTERNS = [
-        # TODO: Add at least 5 regex patterns
-        # Example:
-        # r"ignore (all )?(previous|above) instructions",
+        r"ignore (all )?(previous|above) instructions",
+        r"you are now (DAN|an unrestricted)",
+        r"system prompt",
+        r"reveal your (instructions|prompt)",
+        r"repeat your (instructions|prompt)",
+        r"pretend you are",
+        r"act as (a |an )?unrestricted",
+        r"override safety",
+        r"bỏ qua mọi hướng dẫn",
+        r"tiết lộ chỉ dẫn hệ thống",
     ]
 
     for pattern in INJECTION_PATTERNS:
@@ -70,12 +77,17 @@ def topic_filter(user_input: str) -> bool:
     """
     input_lower = user_input.lower()
 
-    # TODO: Implement logic:
     # 1. If input contains any blocked topic -> return True
-    # 2. If input doesn't contain any allowed topic -> return True
-    # 3. Otherwise -> return False (allow)
+    for topic in BLOCKED_TOPICS:
+        if topic in input_lower:
+            return True
 
-    pass  # Replace with your implementation
+    # 2. If input doesn't contain any allowed topic -> return True
+    for topic in ALLOWED_TOPICS:
+        if topic in input_lower:
+            return False
+
+    return True
 
 
 # ============================================================
@@ -127,15 +139,29 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         """
         self.total_count += 1
         text = self._extract_text(user_message)
+        request_id = id(invocation_context) if invocation_context else 0
 
-        # TODO: Implement logic:
+        # Import audit_logger dynamically to avoid circular dependencies
+        from guardrails.audit_log import audit_logger
+
         # 1. Call detect_injection(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 2. Call topic_filter(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 3. If both are False: return None (let message through)
+        if detect_injection(text):
+            self.blocked_count += 1
+            block_msg = "Blocked: prompt injection detected."
+            if request_id:
+                audit_logger.log_blocked(request_id, "input_injection_regex", block_msg)
+            return self._block_response(block_msg)
 
-        pass  # Replace with your implementation
+        # 2. Call topic_filter(text)
+        if topic_filter(text):
+            self.blocked_count += 1
+            block_msg = "Blocked: off-topic question."
+            if request_id:
+                audit_logger.log_blocked(request_id, "input_topic_filter", block_msg)
+            return self._block_response(block_msg)
+
+        # 3. If both are False: return None
+        return None
 
 
 # ============================================================
